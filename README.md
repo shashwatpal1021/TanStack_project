@@ -1,1 +1,1 @@
-hello this ai project
+Adding all the things related to the AI
