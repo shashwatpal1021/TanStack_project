@@ -1,2 +1,5 @@
 langchain
-ipykernal
+ipykernel
+ollama
+python-dotenv
+openai
