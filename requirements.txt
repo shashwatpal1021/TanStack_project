@@ -3,3 +3,6 @@ ipykernel
 ollama
 python-dotenv
 openai
+pypdf
+gradio
+prettier
