@@ -1,0 +1,54 @@
+:root {
+    --bg-base: #0c0d0e;
+    --bg-surface: #161718;
+    --bg-hover: #1f2023;
+    --border-color: #25262b;
+    --accent: #5e6ad2;
+    --text-main: #eeeeee;
+    --text-muted: #8a8d91;
+}
+
+body {
+    background-color: var(--bg-base);
+    color: var(--text-main);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #2f3133; border-radius: 10px; }
+
+/* Components */
+.nav-link.active { background-color: var(--bg-hover); color: white; }
+.nav-link.active i { color: white !important; }
+
+.issue-row { height: 40px; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background-color 0.1s; }
+.issue-row:hover { background-color: rgba(255,255,255,0.03); }
+
+/* Ghost Buttons (Right Side Menus) */
+.btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: 4px;
+    transition: all 0.1s;
+}
+.btn-ghost:hover {
+    background-color: var(--bg-hover);
+    color: white;
+}
+
+.board-column { width: 280px; min-width: 280px; }
+.board-column.drag-over { background-color: rgba(255,255,255,0.02); border-radius: 8px; }
+
+.stat-card { 
+    background: linear-gradient(135deg, #161718 0%, #0c0d0e 100%); 
+    border: 1px solid var(--border-color); 
+}
+
+.roadmap-track { height: 12px; background: #161718; border-radius: 6px; overflow: hidden; position: relative; }
+.roadmap-bar { height: 100%; background: var(--accent); border-radius: 6px; transition: width 0.5s ease-out; }
+
+/* Animations */
+.fade-in { animation: fadeIn 0.2s ease-in; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

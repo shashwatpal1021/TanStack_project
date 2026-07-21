@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser Sandbox IDE</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Xterm.js for Terminal -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+
+    <!-- Pyodide for Python Execution -->
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+
+    <!-- Marked.js for Markdown parsing in AI Chat -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <style>
+        /* Custom scrollbars for a sleek IDE feel */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1e1e1e;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #424242;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4f4f4f;
+        }
+
+        /* Ensure monaco editor fills its container */
+        #editor-container,
+        #diff-editor-container {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Markdown formatting for AI chat */
+        .ai-message pre {
+            background: #1e1e1e;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            overflow-x: auto;
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
+            border: 1px solid #333;
+        }
+
+        .ai-message code {
+            font-family: monospace;
+            color: #9cdcfe;
+            background: #1e1e1e;
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+        }
+
+        .ai-message pre code {
+            padding: 0;
+            background: transparent;
+        }
+
+        .ai-message strong {
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .ai-message p {
+            margin-bottom: 0.5rem;
+        }
+
+        .ai-message p:last-child {
+            margin-bottom: 0;
+        }
+
+        .ai-message ul {
+            list-style-type: disc;
+            margin-left: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .ai-message ol {
+            list-style-type: decimal;
+            margin-left: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .ai-message h1,
+        .ai-message h2,
+        .ai-message h3,
+        .ai-message h4 {
+            color: #fff;
+            font-weight: bold;
+            margin-top: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .ai-message a {
+            color: #818cf8;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body class="bg-[#1e1e1e] text-[#cccccc] h-screen w-screen overflow-hidden flex flex-col font-sans select-none">
+
+    <div class="h-12 bg-[#252526] border-b border-[#333333] flex items-center px-4 justify-between shrink-0">
+        <div class="flex items-center space-x-3">
+            <button id="toggle-sidebar-btn" class="text-gray-400 hover:text-white transition-colors"
+                title="Toggle Sidebar">
+                <i class="fa-solid fa-bars text-lg"></i>
+            </button>
+            <i class="fa-solid fa-code text-blue-500 text-lg ml-2"></i>
+            <span class="text-sm font-semibold tracking-wide text-white">Browser Sandbox IDE</span>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <!-- Save Button -->
+            <button id="save-btn"
+                class="bg-[#333] hover:bg-[#444] text-white px-3 py-1.5 rounded flex items-center transition-colors shadow-sm hidden text-sm font-medium border border-[#444]">
+                <i class="fa-solid fa-floppy-disk mr-2"></i> Save
+            </button>
+
+            <!-- Function Runner Dropdown -->
+            <select id="function-runner-select"
+                class="bg-[#2d2d2d] border border-[#444] text-gray-200 text-sm rounded px-2 py-1 outline-none hidden max-w-[150px] truncate">
+                <option value="">Run Entire File</option>
+            </select>
+
+
+            <!-- Main Run Button -->
+            <button id="run-btn"
+                class="bg-green-600 hover:bg-green-500 text-white px-4 py-1.5 rounded flex items-center transition-colors shadow-sm hidden text-sm font-medium">
+                <i class="fa-solid fa-play mr-2"></i> Run
+            </button>
+
+            <button id="toggle-ai-btn"
+                class="bg-[#333333] hover:bg-[#444444] text-white px-4 py-1.5 rounded flex items-center transition-colors shadow-sm border border-[#444] text-sm font-medium">
+                <i class="fa-solid fa-sparkles text-purple-400 mr-2"></i> AI Agent
+            </button>
+            <div class="w-px h-5 bg-gray-600 mx-2"></div>
+            <span id="engine-status" class="text-gray-400 text-xs flex items-center">
+                <i class="fa-solid fa-circle text-[8px] text-green-500 mr-1.5"></i> Ready
+            </span>
+        </div>
+    </div>
+
+
+    <div class="flex flex-1 h-[calc(100vh-3rem)] min-h-0 overflow-hidden relative">
+
+        <!-- Sidebar (File Explorer) -->
+        <div id="sidebar"
+            class="w-64 bg-[#252526] border-r border-[#333333] flex flex-col shrink-0 transition-all duration-300">
+            <div
+                class="px-4 py-2 text-xs font-bold text-gray-400 tracking-wider uppercase border-b border-[#333333] flex justify-between items-center">
+                EXPLORER
+                <div class="flex space-x-2">
+                    <button id="btn-new-file" class="hover:text-white transition-colors" title="New File">
+                        <i class="fa-solid fa-file-circle-plus"></i>
+                    </button>
+                    <button id="btn-new-folder" class="hover:text-white transition-colors" title="New Folder">
+                        <i class="fa-solid fa-folder-plus"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="new-file-container" class="hidden px-4 py-2 border-b border-[#333333] bg-[#1e1e1e]">
+                <input type="text" id="new-file-input"
+                    class="w-full bg-[#3c3c3c] text-white border border-blue-500 rounded px-2 py-1 text-sm outline-none"
+                    placeholder="filename.ext">
+            </div>
+            <div id="new-folder-container" class="hidden px-4 py-2 border-b border-[#333333] bg-[#1e1e1e]">
+                <input type="text" id="new-folder-input"
+                    class="w-full bg-[#3c3c3c] text-white border border-yellow-500 rounded px-2 py-1 text-sm outline-none"
+                    placeholder="folder_name">
+            </div>
+            <div id="file-tree" class="flex-1 overflow-y-auto py-2">
+                <!-- Files rendered dynamically here -->
+            </div>
+        </div>
+
+
+        <!-- Central Workspace (Editor + Terminal) -->
+        <div class="flex-1 flex flex-col min-w-0 bg-[#1e1e1e] relative">
+
+            <!-- Editor Tabs -->
+            <div id="editor-tabs"
+                class="h-9 bg-[#2d2d2d] flex items-center shrink-0 overflow-x-auto border-b border-[#333]">
+                <div id="placeholder-tab" class="px-4 py-2 text-sm text-gray-500 italic bg-[#1e1e1e]">
+                    No file open
+                </div>
+            </div>
+
+            <div class="flex-1 flex flex-col min-h-[100px] relative">
+
+                <div id="diff-actions"
+                    class="hidden h-10 bg-[#252526] flex items-center px-4 space-x-3 border-b border-[#1e1e1e] shrink-0 z-20 shadow-md">
+                    <span class="text-xs text-gray-400 font-bold uppercase tracking-wider"><i
+                            class="fa-solid fa-code-compare mr-1"></i> Reviewing Staged Changes</span>
+                    <button id="accept-diff-btn"
+                        class="bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded text-xs font-medium transition-colors shadow-sm"><i
+                            class="fa-solid fa-check mr-1"></i> Accept Changes</button>
+                    <button id="reject-diff-btn"
+                        class="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded text-xs font-medium transition-colors shadow-sm"><i
+                            class="fa-solid fa-xmark mr-1"></i> Reject</button>
+                    <span id="diff-target-label" class="text-xs text-blue-400 ml-auto font-mono"></span>
+                </div>
+
+                <div class="flex-1 relative bg-[#1e1e1e]">
+                    <div id="editor-container" class="absolute inset-0 z-0"></div>
+                    <div id="diff-editor-container" class="absolute inset-0 hidden z-10 bg-[#1e1e1e]"></div>
+
+                    <!-- Live Preview Container -->
+                    <div id="live-preview-container" class="absolute inset-0 hidden z-[15] bg-white flex-col">
+                        <div
+                            class="h-8 bg-[#2d2d2d] flex items-center px-4 justify-between shrink-0 text-xs text-white border-b border-[#444]">
+                            <span class="font-semibold"><i class="fa-solid fa-satellite-dish text-blue-400 mr-2"></i>
+                                Live Server Preview</span>
+                            <div class="flex space-x-3">
+                                <button id="refresh-preview-btn" class="hover:text-blue-400 transition-colors"
+                                    title="Refresh Preview"><i class="fa-solid fa-rotate-right"></i></button>
+                                <button id="close-preview-btn" class="hover:text-red-400 transition-colors"
+                                    title="Close Server"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                        </div>
+                        <iframe id="live-preview-frame" class="flex-1 w-full h-full border-none bg-white"></iframe>
+                    </div>
+
+
+                    <div id="editor-placeholder"
+                        class="absolute inset-0 flex items-center justify-center flex-col text-gray-500 z-20 bg-[#1e1e1e]">
+                        <i class="fa-solid fa-code text-5xl mb-4 opacity-20"></i>
+                        <p>Select or create a file to start coding</p>
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="h-64 bg-[#1e1e1e] border-t border-[#333333] flex flex-col shrink-0 transition-all duration-300 z-30"
+                id="terminal-panel">
+                <div
+                    class="h-8 bg-[#252526] flex items-center px-4 text-xs tracking-wider uppercase border-b border-[#333333] text-gray-400 font-semibold justify-between cursor-default">
+                    <span><i class="fa-solid fa-terminal mr-2"></i> Terminal</span>
+                    <div class="flex space-x-3">
+                        <button id="toggle-terminal-min-btn" class="hover:text-white" title="Minimize Terminal"><i
+                                class="fa-solid fa-minus"></i></button>
+                        <button id="toggle-terminal-max-btn" class="hover:text-white" title="Maximize Terminal"><i
+                                class="fa-solid fa-expand"></i></button>
+                        <button id="clear-terminal-btn" class="hover:text-white" title="Clear Terminal"><i
+                                class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                </div>
+                <div class="flex-1 relative p-2 overflow-hidden" id="terminal-container">
+                    <!-- Xterm.js renders here -->
+                </div>
+            </div>
+        </div>
+
+
+        <div id="ai-panel"
+            class="w-80 bg-[#252526] border-l border-[#333333] flex flex-col shrink-0 hidden shadow-2xl z-40 transition-all absolute right-0 top-0 bottom-0 md:relative">
+            <div class="h-10 border-b border-[#333333] flex items-center px-4 justify-between bg-[#2d2d2d]">
+                <span class="text-sm font-semibold text-white flex items-center"><i
+                        class="fa-solid fa-sparkles text-purple-400 mr-2"></i> Pair Programmer</span>
+                <button id="close-ai-btn" class="text-gray-400 hover:text-white"><i
+                        class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <!-- API Key Setup -->
+            <div id="ai-setup" class="p-4 bg-[#3c3c3c] border-b border-[#4d4d4d] text-sm text-gray-300">
+                <p class="mb-2"><i class="fa-solid fa-key text-yellow-500 mr-1"></i> Gemini API Key Required</p>
+                <input type="password" id="api-key-input"
+                    class="w-full bg-[#1e1e1e] border border-[#555] rounded px-2 py-1 mb-2 text-white outline-none focus:border-purple-500"
+                    placeholder="AIzaSy...">
+                <button id="save-key-btn"
+                    class="w-full bg-purple-600 hover:bg-purple-500 text-white rounded py-1 transition-colors">Save
+                    Key</button>
+            </div>
+
+
+            <!-- Chat History -->
+            <div id="ai-messages" class="flex-1 overflow-y-auto p-4 space-y-4 text-sm text-gray-200">
+                <div class="flex flex-col items-start">
+                    <div
+                        class="bg-[#333] px-3 py-2 rounded-lg rounded-tl-none border border-[#444] text-gray-200 shadow-md">
+                        Hi! I'm your AI Pair Programmer. Ask me to create files, write functions, or debug errors.
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- Chat Input -->
+            <div class="p-3 bg-[#2d2d2d] border-t border-[#333333] flex items-end">
+                <textarea id="ai-chat-input"
+                    class="flex-1 bg-[#1e1e1e] border border-[#444] rounded p-2 text-white text-sm outline-none resize-none focus:border-purple-500 h-10 max-h-32"
+                    placeholder="Ask AI to write code..."></textarea>
+                <button id="send-ai-btn"
+                    class="ml-2 bg-purple-600 hover:bg-purple-500 text-white p-2 rounded flex items-center justify-center transition-colors h-10 w-10">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        const vfs = {
+            'README.md': '# Project Overview\n\nThis project is managed by an AI Assistant. The AI will continuously update this file to maintain context of the workflow and architecture.',
+            'index.js': 'function calculateTotal(a, b) {\n    return a + b;\n}\n\nconsole.log("Welcome to Browser IDE!");\nconsole.log("Total:", calculateTotal(10, 5));',
+            'code.gs': 'function myAppScriptFunction() {\n    Logger.log("Hello from Google Apps Script!");\n    var sheet = SpreadsheetApp.getActiveSpreadsheet();\n    Logger.log("Active sheet: " + sheet.getName());\n}\n\nmyAppScriptFunction();'
+        };
+
+        let currentFile = null;
+        let editorInstance = null;
+        let diffEditorInstance = null;
+        let originalModel = null;
+        let modifiedModel = null;
+        let termInstance = null;
+        let fitAddon = null;
+        let pyodideInstance = null;
+        let currentTerminalLine = '';
+
+        // AI Staging State
+        let stagedAIChanges = {};
+        let activeDiffFilename = null;
+        let aiChatHistory = [];
+
+
+        const PROMPT = '\r\n\x1b[1;32muser@sandbox\x1b[0m:\x1b[1;34m~\x1b[0m$ ';
+
+
+        const sidebar = document.getElementById('sidebar');
+        const terminalPanel = document.getElementById('terminal-panel');
+        const aiPanel = document.getElementById('ai-panel');
+
+
+        document.getElementById('toggle-sidebar-btn').addEventListener('click', () => {
+            sidebar.classList.toggle('w-64');
+            sidebar.classList.toggle('w-0');
+            sidebar.classList.toggle('border-none');
+            setTimeout(() => { if (editorInstance) editorInstance.layout(); if (fitAddon) fitAddon.fit(); }, 300);
+        });
+
+
+        document.getElementById('toggle-terminal-max-btn').addEventListener('click', function () {
+            const icon = this.querySelector('i');
+            if (terminalPanel.classList.contains('absolute')) {
+                terminalPanel.classList.remove('absolute', 'inset-0', 'h-full');
+                terminalPanel.classList.add('h-64', 'relative');
+                icon.className = 'fa-solid fa-expand';
+            } else {
+                terminalPanel.classList.remove('h-64', 'h-8', 'relative');
+                terminalPanel.classList.add('absolute', 'inset-0', 'h-full');
+                icon.className = 'fa-solid fa-compress';
+                document.getElementById('toggle-terminal-min-btn').querySelector('i').className = 'fa-solid fa-minus';
+            }
+            setTimeout(() => { if (fitAddon) fitAddon.fit(); }, 300);
+        });
+
+
+        document.getElementById('toggle-terminal-min-btn').addEventListener('click', function () {
+            const icon = this.querySelector('i');
+            if (terminalPanel.classList.contains('h-8')) {
+                terminalPanel.classList.remove('h-8');
+                terminalPanel.classList.add('h-64');
+                icon.className = 'fa-solid fa-minus';
+            } else {
+                terminalPanel.classList.remove('absolute', 'inset-0', 'h-full', 'h-64');
+                terminalPanel.classList.add('h-8', 'relative');
+                icon.className = 'fa-solid fa-window-restore';
+                document.getElementById('toggle-terminal-max-btn').querySelector('i').className = 'fa-solid fa-expand';
+            }
+            setTimeout(() => { if (fitAddon) fitAddon.fit(); }, 300);
+        });
+
+
+        document.getElementById('clear-terminal-btn').addEventListener('click', () => {
+            if (termInstance) {
+                termInstance.clear();
+                termInstance.write(PROMPT);
+            }
+        });
+
+
+        document.getElementById('toggle-ai-btn').addEventListener('click', () => {
+            aiPanel.classList.toggle('hidden');
+            checkApiKeySetup();
+            setTimeout(() => { if (editorInstance) editorInstance.layout(); }, 300);
+        });
+        document.getElementById('close-ai-btn').addEventListener('click', () => {
+            aiPanel.classList.add('hidden');
+            setTimeout(() => { if (editorInstance) editorInstance.layout(); }, 300);
+        });
+
+
+        document.getElementById('save-btn').addEventListener('click', function () {
+            if (currentFile && editorInstance && document.getElementById('diff-editor-container').classList.contains('hidden')) {
+                vfs[currentFile] = editorInstance.getValue();
+
+                const originalHtml = this.innerHTML;
+                this.innerHTML = '<i class="fa-solid fa-check text-green-400 mr-2"></i> Saved';
+                this.classList.replace('bg-[#333]', 'bg-[#222]');
+
+                // Re-parse functions on save
+                parseFunctionsForCurrentFile();
+
+
+                setTimeout(() => {
+                    this.innerHTML = originalHtml;
+                    this.classList.replace('bg-[#222]', 'bg-[#333]');
+                }, 1500);
+            }
+        });
+
+
+        function parseFunctionsForCurrentFile() {
+            const funcSelect = document.getElementById('function-runner-select');
+            funcSelect.innerHTML = '<option value="">Run Entire File</option>';
+
+            if (!currentFile || (!currentFile.endsWith('.js') && !currentFile.endsWith('.gs'))) {
+                funcSelect.classList.add('hidden');
+                return;
+            }
+
+
+            const code = vfs[currentFile] || '';
+            const functionRegex = /function\s+([a-zA-Z_$][0-9a-zA-Z_$]*)\s*\(/g;
+            let match;
+            let hasFunctions = false;
+
+
+            while ((match = functionRegex.exec(code)) !== null) {
+                const funcName = match[1];
+                const option = document.createElement('option');
+                option.value = funcName;
+                option.textContent = `▶ Run: ${funcName}()`;
+                funcSelect.appendChild(option);
+                hasFunctions = true;
+            }
+
+
+            if (hasFunctions) {
+                funcSelect.classList.remove('hidden');
+            } else {
+                funcSelect.classList.add('hidden');
+            }
+        }
+
+
+        function renderFileTree() {
+            const tree = document.getElementById('file-tree');
+            tree.innerHTML = '';
+
+            const folders = {};
+            const rootFiles = [];
+
+
+            Object.keys(vfs).sort().forEach(filepath => {
+                if (filepath.includes('/')) {
+                    const parts = filepath.split('/');
+                    const folderName = parts[0];
+                    if (!folders[folderName]) folders[folderName] = [];
+                    folders[folderName].push(filepath);
+                } else {
+                    rootFiles.push(filepath);
+                }
+            });
+
+
+            // Render Folders
+            Object.keys(folders).forEach(folder => {
+                const folderDiv = document.createElement('div');
+                folderDiv.className = 'px-4 py-1.5 text-sm text-gray-300 flex items-center justify-between group transition-colors hover:bg-[#2a2d2e] cursor-pointer';
+                folderDiv.innerHTML = `
+                   <div class="flex items-center w-full truncate mr-2">
+                       <i class="fa-solid fa-folder text-yellow-500 mr-2 w-4 text-center"></i>
+                       <span class="folder-name truncate w-full">${folder}</span>
+                   </div>
+                   <div class="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                       <button class="delete-folder-btn text-gray-500 hover:text-red-400 p-1"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
+                   </div>
+               `;
+
+                folderDiv.onclick = (e) => {
+                    if (e.target.closest('.delete-folder-btn')) {
+                        const prefix = folder + '/';
+                        Object.keys(vfs).forEach(f => {
+                            if (f.startsWith(prefix)) {
+                                delete vfs[f];
+                                if (currentFile === f) closeCurrentFile();
+                            }
+                        });
+                        renderFileTree();
+                    }
+                };
+                tree.appendChild(folderDiv);
+
+                folders[folder].forEach(file => {
+                    if (file.endsWith('/.keep')) return;
+
+                    const name = file.substring(file.indexOf('/') + 1);
+                    const fileDiv = document.createElement('div');
+                    fileDiv.className = `px-4 py-1 pl-8 text-sm cursor-pointer flex items-center justify-between group transition-colors ${currentFile === file ? 'bg-[#37373d] text-white' : 'text-gray-400 hover:bg-[#2a2d2e] hover:text-gray-200'}`;
+                    fileDiv.innerHTML = `
+                       <div class="flex items-center w-full truncate mr-2">
+                           <i class="fa-solid fa-file-code text-gray-500 mr-2 w-4 text-center"></i>
+                           <span class="file-name truncate w-full">${name}</span>
+                       </div>
+                       <div class="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                           <button class="delete-btn text-gray-500 hover:text-red-400 p-1"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
+                       </div>
+                   `;
+                    fileDiv.onclick = (e) => {
+                        if (e.target.closest('.delete-btn')) deleteFile(file);
+                        else openFile(file);
+                    };
+                    tree.appendChild(fileDiv);
+                });
+            });
+
+
+            // Render Root Files
+            rootFiles.forEach(file => {
+                if (file.endsWith('/.keep')) return;
+
+                const isJs = file.endsWith('.js') || file.endsWith('.json') || file.endsWith('.gs');
+                const isPy = file.endsWith('.py');
+                const iconColor = isJs ? 'text-yellow-400' : isPy ? 'text-blue-400' : 'text-gray-400';
+
+                const fileDiv = document.createElement('div');
+                fileDiv.className = `px-4 py-1.5 text-sm cursor-pointer flex items-center justify-between group transition-colors ${currentFile === file ? 'bg-[#37373d] text-white border-l-2 border-blue-500' : 'text-gray-400 hover:bg-[#2a2d2e] hover:text-gray-200 border-l-2 border-transparent'}`;
+                fileDiv.innerHTML = `
+                   <div class="flex items-center w-full truncate mr-2">
+                       <i class="fa-solid fa-file-code ${iconColor} mr-2 w-4 text-center"></i>
+                       <span class="file-name truncate w-full">${file}</span>
+                   </div>
+                   <div class="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                       <button class="rename-btn text-gray-500 hover:text-blue-400 p-1"><i class="fa-solid fa-pen text-[10px]"></i></button>
+                       <button class="delete-btn text-gray-500 hover:text-red-400 p-1"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
+                   </div>
+               `;
+
+                fileDiv.onclick = (e) => {
+                    if (e.target.closest('.delete-btn')) deleteFile(file);
+                    else if (e.target.closest('.rename-btn')) {
+                        const nameSpan = fileDiv.querySelector('.file-name');
+                        nameSpan.outerHTML = `<input type="text" class="rename-input bg-[#3c3c3c] text-white outline-none w-full px-1 text-xs" value="${file}">`;
+                        const input = fileDiv.querySelector('.rename-input');
+                        input.focus();
+                        input.onclick = (ev) => ev.stopPropagation();
+
+                        const handleRename = () => {
+                            const newName = input.value.trim();
+                            if (newName && newName !== file) {
+                                vfs[newName] = vfs[file];
+                                delete vfs[file];
+                                if (currentFile === file) {
+                                    currentFile = newName;
+                                    openFile(newName);
+                                }
+                            }
+                            renderFileTree();
+                        };
+                        input.onkeydown = (ev) => {
+                            if (ev.key === 'Enter') handleRename();
+                            else if (ev.key === 'Escape') renderFileTree();
+                        };
+                        input.onblur = handleRename;
+                    }
+                    else openFile(file);
+                };
+                tree.appendChild(fileDiv);
+            });
+        }
+
+
+        function getLanguage(filename) {
+            if (filename.endsWith('.js') || filename.endsWith('.gs')) return 'javascript';
+            if (filename.endsWith('.py')) return 'python';
+            if (filename.endsWith('.html')) return 'html';
+            if (filename.endsWith('.css')) return 'css';
+            if (filename.endsWith('.json')) return 'json';
+            return 'plaintext';
+        }
+
+
+        function openFile(filename) {
+            if (currentFile && editorInstance && document.getElementById('diff-editor-container').classList.contains('hidden')) {
+                vfs[currentFile] = editorInstance.getValue();
+            }
+
+
+            currentFile = filename;
+            renderFileTree();
+            parseFunctionsForCurrentFile();
+
+
+            const placeholderEl = document.getElementById('editor-placeholder');
+            const tabsEl = document.getElementById('editor-tabs');
+
+            document.getElementById('live-preview-container').classList.add('hidden');
+
+            const isJs = filename.endsWith('.js') || filename.endsWith('.json') || filename.endsWith('.gs');
+            const isPy = filename.endsWith('.py');
+            const isHtml = filename.endsWith('.html');
+            const iconColor = isJs ? 'text-yellow-400' : isPy ? 'text-blue-400' : isHtml ? 'text-orange-500' : 'text-gray-400';
+
+            tabsEl.innerHTML = `
+               <div class="px-4 py-2 text-sm text-white bg-[#1e1e1e] border-t-2 border-blue-500 flex items-center min-w-max border-r border-[#333]">
+                   <i class="fa-solid fa-file-code ${iconColor} mr-2"></i> ${filename}
+               </div>
+           `;
+
+            placeholderEl.style.display = 'none';
+
+
+            const runBtn = document.getElementById('run-btn');
+            const saveBtn = document.getElementById('save-btn');
+            saveBtn.classList.remove('hidden');
+
+
+            if (isJs || isPy || isHtml) {
+                runBtn.classList.remove('hidden');
+                if (isHtml) {
+                    runBtn.innerHTML = '<i class="fa-solid fa-satellite-dish mr-2"></i> Live Server';
+                    runBtn.className = 'bg-orange-600 hover:bg-orange-500 text-white px-4 py-1.5 rounded flex items-center transition-colors shadow-sm text-sm font-medium';
+                } else {
+                    runBtn.innerHTML = '<i class="fa-solid fa-play mr-2"></i> Run';
+                    runBtn.className = 'bg-green-600 hover:bg-green-500 text-white px-4 py-1.5 rounded flex items-center transition-colors shadow-sm text-sm font-medium';
+                }
+            } else {
+                runBtn.classList.add('hidden');
+            }
+
+
+            // Restore normal editor if diff view was open
+            document.getElementById('diff-editor-container').classList.add('hidden');
+            document.getElementById('diff-actions').classList.add('hidden');
+            document.getElementById('editor-container').classList.remove('hidden');
+
+
+            if (editorInstance) {
+                monaco.editor.setModelLanguage(editorInstance.getModel(), getLanguage(filename));
+                editorInstance.setValue(vfs[filename] || '');
+                editorInstance.layout();
+            }
+        }
+
+
+        function deleteFile(filename) {
+            if (vfs[filename] !== undefined) {
+                delete vfs[filename];
+                if (currentFile === filename) closeCurrentFile();
+                renderFileTree();
+            }
+        }
+
+
+        function closeCurrentFile() {
+            currentFile = null;
+            if (editorInstance) editorInstance.setValue('');
+            document.getElementById('editor-placeholder').style.display = 'flex';
+            document.getElementById('live-preview-container').classList.add('hidden');
+            document.getElementById('editor-tabs').innerHTML = '<div id="placeholder-tab" class="px-4 py-2 text-sm text-gray-500 italic bg-[#1e1e1e]">No file open</div>';
+            document.getElementById('run-btn').classList.add('hidden');
+            document.getElementById('save-btn').classList.add('hidden');
+            document.getElementById('function-runner-select').classList.add('hidden');
+        }
+
+
+        document.getElementById('btn-new-file').onclick = () => {
+            document.getElementById('new-file-container').classList.remove('hidden');
+            document.getElementById('new-file-input').focus();
+        };
+        document.getElementById('new-file-input').onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                const name = e.target.value.trim();
+                if (name && vfs[name] === undefined) {
+                    vfs[name] = '';
+                    e.target.parentElement.classList.add('hidden');
+                    e.target.value = '';
+                    openFile(name);
+                }
+            } else if (e.key === 'Escape') {
+                e.target.parentElement.classList.add('hidden');
+                e.target.value = '';
+            }
+        };
+
+
+        document.getElementById('btn-new-folder').onclick = () => {
+            document.getElementById('new-folder-container').classList.remove('hidden');
+            document.getElementById('new-folder-input').focus();
+        };
+        document.getElementById('new-folder-input').onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                let name = e.target.value.trim();
+                if (name) {
+                    if (!name.endsWith('/')) name += '/';
+                    vfs[name + '.keep'] = '';
+                    e.target.parentElement.classList.add('hidden');
+                    e.target.value = '';
+                    renderFileTree();
+                }
+            } else if (e.key === 'Escape') {
+                e.target.parentElement.classList.add('hidden');
+                e.target.value = '';
+            }
+        };
+
+
+        document.getElementById('run-btn').addEventListener('click', () => {
+            if (!currentFile) return;
+            if (editorInstance && document.getElementById('diff-editor-container').classList.contains('hidden')) {
+                vfs[currentFile] = editorInstance.getValue(); // Auto-save
+            }
+
+            if (currentFile.endsWith('.html')) {
+                startLiveServer(currentFile);
+            } else {
+                const specificFunction = document.getElementById('function-runner-select').value;
+                let command = currentFile.endsWith('.py') ? `python ${currentFile}` : `node ${currentFile}`;
+                if (specificFunction) {
+                    termInstance.writeln(`\x1b[35mTargeting function: ${specificFunction}()\x1b[0m`);
+                    command += ` --fn=${specificFunction}`;
+                }
+                handleCommand(command);
+            }
+        });
+
+
+        function startLiveServer(filename) {
+            let htmlContent = vfs[filename] || '';
+            // Inline CSS and JS files dynamically from VFS
+            htmlContent = htmlContent.replace(/<link\s+rel="stylesheet"\s+href="([^"]+)">/gi, (m, p1) => vfs[p1.replace(/^\.\//, '')] ? `<style>${vfs[p1.replace(/^\.\//, '')]}</style>` : m);
+            htmlContent = htmlContent.replace(/<script\s+src="([^"]+)"><\/script>/gi, (m, p1) => vfs[p1.replace(/^\.\//, '')] ? '<script>' + vfs[p1.replace(/^\.\//, '')] + '<\/script>' : m);
+
+
+            document.getElementById('live-preview-frame').srcdoc = htmlContent;
+            document.getElementById('live-preview-container').classList.remove('hidden');
+            document.getElementById('editor-container').classList.add('hidden');
+            if (termInstance) termInstance.writeln(`\x1b[1;36m[Live Server]\x1b[0m Started hosting \x1b[32m${filename}\x1b[0m`);
+        }
+
+
+        document.getElementById('refresh-preview-btn')?.addEventListener('click', () => {
+            if (currentFile && currentFile.endsWith('.html')) {
+                startLiveServer(currentFile);
+            }
+        });
+
+
+        document.getElementById('close-preview-btn')?.addEventListener('click', () => {
+            document.getElementById('live-preview-container').classList.add('hidden');
+            document.getElementById('editor-container').classList.remove('hidden');
+            document.getElementById('live-preview-frame').srcdoc = '';
+            if (editorInstance) editorInstance.layout();
+        });
+
+
+        async function executeNode(filename, specificFunction = null) {
+            let code = vfs[filename];
+            if (code === undefined) {
+                termInstance.writeln(`\x1b[1;31mError: File '${filename}' not found.\x1b[0m`);
+                return;
+            }
+
+
+            const customConsole = {
+                log: (...args) => termInstance.writeln(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')),
+                error: (...args) => termInstance.writeln(`\x1b[1;31m${args.map(String).join(' ')}\x1b[0m`),
+                warn: (...args) => termInstance.writeln(`\x1b[1;33m${args.map(String).join(' ')}\x1b[0m`),
+            };
+
+
+            // Apps Script Mock Injections
+            const SpreadsheetApp = {
+                getActiveSpreadsheet: () => ({ getName: () => "Mocked_AppScript_Sheet" })
+            };
+            const Logger = {
+                log: (...args) => customConsole.log("[Logger]", ...args)
+            };
+            const HtmlService = {
+                createHtmlOutput: (html) => ({ type: 'HtmlOutput', content: html })
+            };
+
+
+            // Setup specific function isolation if requested
+            if (specificFunction) {
+                code += `\n\nif (typeof ${specificFunction} === 'function') {
+                   try {
+                       const res = await ${specificFunction}();
+                       if (res !== undefined) console.log("\\x1b[36m=> Result:\\x1b[0m", res);
+                   } catch(e) { console.error(e); }
+               } else {
+                   console.error("Function ${specificFunction} not found.");
+               }`;
+            }
+
+
+            try {
+                const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
+                const executor = new AsyncFunction('console', 'SpreadsheetApp', 'Logger', 'HtmlService', code);
+                await executor(customConsole, SpreadsheetApp, Logger, HtmlService);
+            } catch (error) {
+                customConsole.error(error.toString());
+            }
+        }
+
+
+        async function executePython(filename) {
+            const code = vfs[filename];
+            if (code === undefined) return termInstance.writeln(`\x1b[1;31mError: File '${filename}' not found.\x1b[0m`);
+
+
+            if (!pyodideInstance) {
+                termInstance.writeln(`\x1b[33mInitializing Python Environment (Pyodide)...\x1b[0m`);
+                try {
+                    pyodideInstance = await loadPyodide({
+                        stdout: (t) => termInstance.writeln(t),
+                        stderr: (t) => termInstance.writeln(`\x1b[1;31m${t}\x1b[0m`),
+                    });
+                    await pyodideInstance.loadPackage("micropip");
+                } catch (e) {
+                    return termInstance.writeln(`\x1b[1;31mFailed to load Python runtime: ${e.message}\x1b[0m`);
+                }
+            }
+            try {
+                await pyodideInstance.runPythonAsync(code);
+            } catch (error) {
+                termInstance.writeln(`\x1b[1;31m${error.toString()}\x1b[0m`);
+            }
+        }
+
+
+        function checkApiKeySetup() {
+            if (localStorage.getItem('ide_gemini_key')) document.getElementById('ai-setup').style.display = 'none';
+            else document.getElementById('ai-setup').style.display = 'block';
+        }
+
+
+        document.getElementById('save-key-btn').addEventListener('click', () => {
+            const keyVal = document.getElementById('api-key-input').value.trim();
+            if (keyVal) {
+                localStorage.setItem('ide_gemini_key', keyVal);
+                checkApiKeySetup();
+                appendAiMessage('System', 'API Key saved locally.', 'bg-green-900 border-green-700');
+            }
+        });
+
+
+        function appendAiMessage(sender, text, customClass = '') {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `flex flex-col ${sender === 'You' ? 'items-end' : 'items-start'} mb-4`;
+
+            const bubble = document.createElement('div');
+            if (sender === 'You') {
+                bubble.className = 'bg-blue-600 px-3 py-2 rounded-lg rounded-tr-none text-white max-w-[90%] break-words shadow-md text-sm';
+                bubble.innerText = text;
+            } else {
+                bubble.className = `ai-message bg-[#333] px-3 py-2 rounded-lg rounded-tl-none border border-[#444] text-gray-200 w-[95%] break-words shadow-md text-sm ${customClass}`;
+                // Use marked to parse Markdown if available, otherwise fallback
+                if (typeof marked !== 'undefined') {
+                    bubble.innerHTML = marked.parse(text);
+                } else {
+                    bubble.innerHTML = text.replace(/```(\w*)\n([\s\S]*?)```/g, (m, l, c) => `<pre><code>${c.replace(/</g, '&lt;')}</code></pre>`);
+                }
+            }
+            msgDiv.appendChild(bubble);
+            const container = document.getElementById('ai-messages');
+            container.appendChild(msgDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+
+        window.reviewStagedChanges = (filename) => {
+            if (stagedAIChanges[filename] !== undefined) {
+                activeDiffFilename = filename;
+                document.getElementById('editor-container').classList.add('hidden');
+                document.getElementById('editor-placeholder').style.display = 'none';
+
+                document.getElementById('diff-editor-container').classList.remove('hidden');
+                document.getElementById('diff-actions').classList.remove('hidden');
+                document.getElementById('diff-target-label').innerText = `Target: ${filename}`;
+
+
+                const targetLang = getLanguage(filename);
+                const originalCode = vfs[filename] || '';
+                const newCode = stagedAIChanges[filename];
+
+
+                if (!originalModel) originalModel = monaco.editor.createModel(originalCode, targetLang);
+                else { originalModel.setValue(originalCode); monaco.editor.setModelLanguage(originalModel, targetLang); }
+
+                if (!modifiedModel) modifiedModel = monaco.editor.createModel(newCode, targetLang);
+                else { modifiedModel.setValue(newCode); monaco.editor.setModelLanguage(modifiedModel, targetLang); }
+
+                diffEditorInstance.setModel({ original: originalModel, modified: modifiedModel });
+            }
+        };
+
+
+        window.applyStagedChanges = (filename) => {
+            if (stagedAIChanges[filename] !== undefined) {
+                vfs[filename] = stagedAIChanges[filename];
+                openFile(filename);
+                delete stagedAIChanges[filename];
+                appendAiMessage('System', `Changes applied directly to ${filename}`, 'bg-indigo-900 border-indigo-700 text-xs text-white');
+            }
+        };
+
+
+        document.getElementById('accept-diff-btn').addEventListener('click', () => {
+            if (activeDiffFilename) {
+                const newCode = modifiedModel.getValue();
+                vfs[activeDiffFilename] = newCode;
+                delete stagedAIChanges[activeDiffFilename];
+                openFile(activeDiffFilename);
+            }
+            closeDiffView();
+        });
+
+
+        document.getElementById('reject-diff-btn').addEventListener('click', closeDiffView);
+
+
+        function closeDiffView() {
+            document.getElementById('diff-editor-container').classList.add('hidden');
+            document.getElementById('diff-actions').classList.add('hidden');
+            activeDiffFilename = null;
+            if (currentFile) {
+                document.getElementById('editor-container').classList.remove('hidden');
+            } else {
+                document.getElementById('editor-placeholder').style.display = 'flex';
+            }
+            if (editorInstance) editorInstance.layout();
+        }
+
+
+        const aiTools = [{
+            functionDeclarations: [
+                {
+                    name: "read_file",
+                    description: "Read the current contents of a file to understand what exists before editing.",
+                    parameters: { type: "OBJECT", properties: { filename: { type: "STRING" } }, required: ["filename"] }
+                },
+                {
+                    name: "manage_file",
+                    description: "Stage a completely new file or updated code for a file. Use this AFTER asking user permission.",
+                    parameters: { type: "OBJECT", properties: { filename: { type: "STRING" }, content: { type: "STRING", description: "Full code content" } }, required: ["filename", "content"] }
+                },
+                {
+                    name: "run_terminal",
+                    description: "Run terminal commands (e.g., node, python)",
+                    parameters: { type: "OBJECT", properties: { command: { type: "STRING" } }, required: ["command"] }
+                }
+            ]
+        }];
+
+
+        async function processAiResponse(response, apiKey) {
+            const candidate = response.candidates[0];
+            if (!candidate || !candidate.content) return;
+
+
+            const parts = candidate.content.parts;
+            let textResponse = "";
+            let toolCalls = [];
+
+
+            aiChatHistory.push({ role: "model", parts: parts });
+
+
+            for (const part of parts) {
+                if (part.text) textResponse += part.text;
+                if (part.functionCall) toolCalls.push(part.functionCall);
+            }
+
+
+            if (textResponse) appendAiMessage('AI', textResponse);
+
+
+            if (toolCalls.length > 0) {
+                const functionResponses = [];
+                for (const call of toolCalls) {
+                    let resultMsg = "";
+                    try {
+                        if (call.name === 'read_file') {
+                            const fn = call.args.filename;
+                            if (vfs[fn] !== undefined) resultMsg = `File Content:\n${vfs[fn]}`;
+                            else resultMsg = `File does not exist. You need to create it.`;
+                            appendAiMessage('System', `📖 AI read file: ${fn}`, 'bg-indigo-900 border-indigo-700 text-xs text-white opacity-70');
+                        }
+                        else if (call.name === 'manage_file') {
+                            const filename = call.args.filename;
+                            stagedAIChanges[filename] = call.args.content;
+
+                            // Render Staging Card in Chat
+                            const history = document.getElementById('ai-messages');
+                            const div = document.createElement('div');
+                            div.className = 'flex flex-col space-y-1 my-2 items-start';
+                            div.innerHTML = `
+                               <div class="bg-[#2d2d2d] border border-[#3d3d3d] rounded-lg p-3 text-sm text-gray-200 shadow-sm self-start inline-block w-[95%]">
+                                   <div class="font-semibold text-blue-400 mb-2"><i class="fa-solid fa-file-code mr-1"></i> Changes Staged</div>
+                                   <p class="mb-3 text-gray-300">I have prepared updates for <code class="bg-[#1e1e1e] px-1 py-0.5 rounded text-blue-300 border border-[#444]">${filename}</code>.</p>
+                                   <div class="flex space-x-2">
+                                       <button onclick="reviewStagedChanges('${filename}')" class="bg-[#333] hover:bg-[#444] border border-[#555] text-white px-3 py-1.5 rounded text-xs transition-colors flex items-center">
+                                           <i class="fa-solid fa-code-compare mr-1"></i> Review Diff
+                                       </button>
+                                       <button onclick="applyStagedChanges('${filename}')" class="bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded text-xs transition-colors flex items-center">
+                                           <i class="fa-solid fa-bolt mr-1"></i> Apply Directly
+                                       </button>
+                                   </div>
+                               </div>
+                           `;
+                            history.appendChild(div);
+                            history.scrollTop = history.scrollHeight;
+
+                            resultMsg = `Changes staged successfully. Waiting for user to review UI buttons.`;
+                        }
+                        else if (call.name === 'run_terminal') {
+                            handleCommand(call.args.command);
+                            resultMsg = `Executed '${call.args.command}'.`;
+                        }
+                    } catch (e) {
+                        resultMsg = `Error: ${e.message}`;
+                    }
+
+
+                    functionResponses.push({
+                        functionResponse: { name: call.name, response: { result: resultMsg } }
+                    });
+                }
+
+                aiChatHistory.push({ role: "user", parts: functionResponses });
+                await callGeminiApi(apiKey, true);
+            }
+        }
+
+
+        async function callGeminiApi(apiKey, isToolFollowUp = false) {
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+            const systemPrompt = `You are a Senior Pair-Programmer AI operating in a VS Code-like sandboxed IDE.
+Rule 1: Always use 'read_file' to check existing code before modifying anything! Do not guess.
+Rule 2: Discuss what you are going to do, ask "Should I stage these changes?", wait for user approval, and THEN use 'manage_file'.
+Rule 3: ALWAYS create, read, and continuously update a 'README.md' file to document the project workflow, architecture, and recent changes. It is your single source of truth.
+Rule 4: You can run terminal commands. Current files: [${Object.keys(vfs).join(', ')}].
+Rule 5: Format ALL your chat responses using Markdown (bolding, lists, code snippets).`;
+
+
+            const payload = {
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents: aiChatHistory,
+                tools: aiTools
+            };
+
+
+            const loadingId = 'loading-' + Date.now();
+            if (!isToolFollowUp) {
+                const loadingDiv = document.createElement('div');
+                loadingDiv.id = loadingId;
+                loadingDiv.className = 'text-xs text-gray-500 italic mb-4 ml-2';
+                loadingDiv.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Thinking...';
+                document.getElementById('ai-messages').appendChild(loadingDiv);
+            }
+
+
+            try {
+                const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (document.getElementById(loadingId)) document.getElementById(loadingId).remove();
+                if (!response.ok) throw new Error((await response.json()).error?.message || 'API Error');
+                await processAiResponse(await response.json(), apiKey);
+            } catch (err) {
+                if (document.getElementById(loadingId)) document.getElementById(loadingId).remove();
+                appendAiMessage('System', `API Error: ${err.message}`, 'bg-red-900 border-red-700 text-white');
+            }
+        }
+
+
+        // Allow sending message with Enter (Shift+Enter for new line)
+        document.getElementById('ai-chat-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById('send-ai-btn').click();
+            }
+        });
+
+        document.getElementById('send-ai-btn').addEventListener('click', () => {
+            const text = document.getElementById('ai-chat-input').value.trim();
+            if (text) {
+                appendAiMessage('You', text);
+                document.getElementById('ai-chat-input').value = '';
+                aiChatHistory.push({ role: "user", parts: [{ text: text }] });
+                callGeminiApi(localStorage.getItem('ide_gemini_key') || "");
+            }
+        });
+
+
+        function initTerminal() {
+            termInstance = new Terminal({
+                cursorBlink: true, theme: { background: '#1e1e1e', foreground: '#cccccc' },
+                fontFamily: 'Menlo, Monaco, "Courier New", monospace', fontSize: 13, convertEol: true,
+                scrollback: 5000
+            });
+            fitAddon = new FitAddon.FitAddon();
+            termInstance.loadAddon(fitAddon);
+            termInstance.open(document.getElementById('terminal-container'));
+
+            setTimeout(() => { fitAddon.fit(); }, 200);
+            termInstance.writeln('Welcome to the Browser Sandbox Terminal');
+            termInstance.write(PROMPT);
+
+
+            termInstance.onData(data => {
+                if (data.startsWith('\x1b')) return;
+                const code = data.charCodeAt(0);
+
+                if (data === '\r') {
+                    termInstance.write('\r\n');
+                    const cmd = currentTerminalLine.trim();
+                    currentTerminalLine = '';
+                    if (cmd) handleCommand(cmd);
+                    else termInstance.write(PROMPT);
+                } else if (code === 127 || code === 8) {
+                    if (currentTerminalLine.length > 0) {
+                        currentTerminalLine = currentTerminalLine.slice(0, -1);
+                        termInstance.write('\b \b');
+                    }
+                } else if (code >= 32 && code <= 126) {
+                    currentTerminalLine += data;
+                    termInstance.write(data);
+                }
+            });
+            window.addEventListener('resize', () => { if (fitAddon) fitAddon.fit(); });
+        }
+
+
+        async function handleCommand(cmd) {
+            const args = cmd.split(' ').filter(Boolean);
+            const program = args[0];
+
+
+            if (program === 'clear') {
+                termInstance.clear();
+            } else if (program === 'ls') {
+                termInstance.writeln(Object.keys(vfs).join('  '));
+            } else if (program === 'node') {
+                if (args[1]) {
+                    const fnTarget = args.find(a => a.startsWith('--fn='))?.split('=')[1];
+                    await executeNode(args[1], fnTarget);
+                }
+                else termInstance.writeln("Usage: node <filename>");
+            }
+            else if (program === 'python') {
+                if (args[1]) await executePython(args[1]);
+                else termInstance.writeln("Usage: python <filename>");
+            }
+            else {
+                termInstance.writeln(`bash: ${program}: command not found`);
+            }
+
+            termInstance.write(PROMPT);
+        }
+
+
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs/loader.min.js';
+        script.onload = () => {
+            require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs' } });
+            require(['vs/editor/editor.main'], function () {
+                monaco.editor.setTheme('vs-dark');
+
+                editorInstance = monaco.editor.create(document.getElementById('editor-container'), {
+                    value: '', language: 'javascript', theme: 'vs-dark',
+                    automaticLayout: true, minimap: { enabled: false }, fontSize: 14, padding: { top: 16 }
+                });
+
+                diffEditorInstance = monaco.editor.createDiffEditor(document.getElementById('diff-editor-container'), {
+                    theme: 'vs-dark', automaticLayout: true, renderSideBySide: true,
+                    fontSize: 14, padding: { top: 16 }, ignoreTrimWhitespace: false
+                });
+
+                initTerminal();
+                renderFileTree();
+                checkApiKeySetup();
+                openFile('index.js');
+            });
+        };
+        document.head.appendChild(script);
+
+
+    </script>
+</body>
+
+</html>
